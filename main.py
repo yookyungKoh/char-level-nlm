@@ -21,7 +21,6 @@ def main():
     parser.add_argument('--valid_dir', type=str, default='./valid_dir', help='valid model dir')
     parser.add_argument('--test_dir', type=str, default='./test_dir', help='test result dir')
     parser.add_argument('--filename', type=str, default='train.txt', help='dataset name')
-    #parser.add_argument('--filename', type=str, default='train.txt', help='dataset name')
     
     # CNN
     parser.add_argument('--vocab_size', type=int, default=50, help='character vocab size')
