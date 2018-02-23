@@ -26,7 +26,6 @@ class Model(nn.Module):
         self.bias = args.bias
         self.max_word_len = args.max_word_len
         self.vocab_size = args.vocab_size
-        self.batch_size = args.batch_size
         
         # Embedding
         self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
@@ -105,7 +104,7 @@ class Model(nn.Module):
         
         # Forward propagate RNN
         out, h = self.lstm(x, h)
-        out = out.permute(1,0,2)
+        out = out.view(self.batch_size, self.seq_len, self.hidden_dim)
         # out size: [20 x 35 x 300]
 
         # Decode hidden state of last time step

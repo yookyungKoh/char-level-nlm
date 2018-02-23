@@ -1,0 +1,5 @@
+*.swp
+*.ipynb
+*.pyc
+data/
+

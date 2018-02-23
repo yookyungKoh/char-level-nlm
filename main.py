@@ -17,7 +17,7 @@ def main():
     
     parser.add_argument('--data', type=str, default='./data', help='location of data')
     parser.add_argument('--cuda', action='store_true', default=True, help='use cuda')
-    parser.add_argument('--checkpoint', type=str, default='./checkpoint', help='save model')
+    parser.add_argument('--checkpoint', type=str, default='./checkpoint', help='save model dir')
     #parser.add_argument('--filename', type=str, default='train.txt', help='dataset name')
     
     # CNN
@@ -45,6 +45,9 @@ def main():
     
     args = parser.parse_args()
     train(args)
+
+    if not os.path.exists(args.checkpoint):
+        os.makedirs(args.checkpoint)
 
 def detach(states):
     return [state.detach() for state in states]
