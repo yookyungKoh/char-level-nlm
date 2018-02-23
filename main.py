@@ -17,8 +17,10 @@ def main():
     
     parser.add_argument('--data', type=str, default='./data', help='location of data')
     parser.add_argument('--cuda', action='store_true', default=True, help='use cuda')
-    parser.add_argument('--checkpoint', type=str, default='./checkpoint', help='save model')
-    #parser.add_argument('--filename', type=str, default='train.txt', help='dataset name')
+    parser.add_argument('--checkpoint', type=str, default='./checkpoint', help='save model dir')
+    parser.add_argument('--valid_dir', type=str, default='./valid_dir', help='valid model dir')
+    parser.add_argument('--test_dir', type=str, default='./test_dir', help='test result dir')
+    parser.add_argument('--filename', type=str, default='train.txt', help='dataset name')
     
     # CNN
     parser.add_argument('--vocab_size', type=int, default=50, help='character vocab size')
@@ -44,107 +46,117 @@ def main():
     parser.add_argument('--constraint', type=float, default=5.0, help='L2 norm constraint')
     
     args = parser.parse_args()
+    
+    if not os.path.exists(args.checkpoint):
+        os.makedirs(args.checkpoint)
+    if not os.path.exists(args.valid_dir):
+        os.makedirs(args.valid_dir)
+    if not os.path.exists(args.test_dir):
+        os.makedirs(args.test_dir)
+
     train(args)
+    #test(args)
 
 def detach(states):
     return [state.detach() for state in states]
 
 def train(args):
-    
-    model = Model(args)
-    if args.cuda:
-        model.cuda()
+    # for train
+    data_tr, trX, trY = get_batch('train.txt', args)
+    train_iter = trX.size(1) // args.seq_len
+    _, word_index, vocab_tr = word_embedding('train.txt', args)
 
+    model = Model(args, len(vocab_tr)).cuda()
     model.train()
     loss_function = nn.CrossEntropyLoss()
     optimizer = optim.SGD(model.parameters(), lr=args.lr)
     
-    # for train
-    data_tr, trX, trY = get_batch('train.txt', args)
-    train_iter = trX.size(1) // args.seq_len
-    _, word_index, vocab_tr = word_embedding('train.txt')
-
     # Training
     start_process = time.time()
     for epoch in tqdm(range(1, args.epoch+1)):
+        
         avg_loss = 0
         states = (Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda(),
                 Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda())
 
         for i in range(train_iter):
-            
-            # Step 1. Prepare inputs --> batches of trX, trY
             inputs = trX[:, i:i+args.seq_len, :]
             targets = Variable(trY[:, (i+1):(i+1)+args.seq_len].contiguous().view(-1)).cuda()
-
-            # Step 2. Before passing in a new instance, zero_grad
             model.zero_grad()
-            
-            # Step 3. Run the forward pass
             states = detach(states)
             train_out, states = model(inputs, states)
-            
-            # Step 4. Compute loss function (with Variable)
             loss = loss_function(train_out.view(-1,len(vocab_tr)), targets)
-            
-            # Step 5. Backpropagate and update the gradient
             loss.backward()
             nn.utils.clip_grad_norm(model.parameters(), args.constraint)
             optimizer.step()
             
-            avg_loss += loss.data[0]
+            avg_loss += loss.data[0]/train_iter
             
-        avg_loss /= train_iter
         PPL = np.exp(avg_loss)
 
-        print("epoch: {}, loss: {}, PPL: {}, lr: {}".format(epoch, avg_loss, PPL, args.lr))
-        torch.save(model.state_dict(), '%s/checkpoint.pth' %(args.checkpoint))
- 
-    end_process = time.time()
-    print("Train completed in: {}".format(int(end_process - start_process), "sec"))    
-    
-    torch.save(model.state_dict(), '%s/checkpoint.pth' % (args.checkpoint))
+        print("epoch: {}, loss: {}, PPL: {}".format(epoch, avg_loss, PPL))
+    torch.save(model, '%s/checkpoint.pth' %(args.checkpoint))
+        
+#        print('==========Validation==========')
+#        _, index_val, vocab_val = word_embedding('valid.txt', args)
+#        data_val, valX, valY = get_batch('valid.txt', args)
+#        valid_iter = valX.size(1)//args.seq_len
+#        with open('%s/checkpoint.pth'%(args.checkpoint), 'rb') as f:
+#            model = torch.load(f)
+#        model.eval()
+#        val_loss = 0
+#        ppl_valid = []
+        
+#        states = (Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda(),
+#                Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda())
+#
+#        for i in range(valid_iter):
+#            val_input = valX[:, i:i+args.seq_len, :]
+#            val_target = Variable(valY[:, i+1:(i+1)+args.seq_len]).contiguous().view(-1).cuda()
+#            
+#            valid_out, states = model(val_input, states)
+#            val_loss += loss_function(valid_out.view(-1, len(vocab_val)), val_target).data[0]
+#        
+#        val_loss /= train_iter
+#        ppl_ = np.exp(val_loss)
+#        ppl_valid.append(ppl_)
+#        
+#        print('val_loss: {}, val_PPL: {}'.format(val_loss, ppl_))
+#         
+#        
+#    torch.save(model, '%s/model.pth'%(args.checkpoint))
+#
+#    end_process = time.time()
+#    print("Train completed in: {}".format(int(end_process - start_process), "sec"))    
 
-def valid(args):
-    # for validation
-    model.eval()
-    valid_loss = 0
-    ppl_valid = []
-    
-    for epoch in range(1, args.epoch+1):
-        
-        _, index_val, vocab_val = word_embedding('valid.txt')
-        data_val, valX, valY = get_batch('valid.txt', args.batch_size, args.seq_len)
-        val_input = valX[:, i*args.seq_len:(i+1)*args.seq_len, :]
-        val_target = Variable(valY[:, i*args.seq_len:(i+1)*args.seq_len]).contiguous().view(-1).cuda()
-        
-        valid_out, states = model(val_input, states)
-        valid_loss += nn.NLLLoss(F.softmax(valid_out).view(-1, len(vocab_val)), val_target)
-        ppl_ = torch.exp(valid_loss / len(valX))
-        ppl_valid.append(ppl_)
-        
-    print(valid_loss, ppl_valid)
- 
 def test(args):       
     # for test
+    print('==========Testing==========')
+    with open('%s/model.pth'%(args.checkpoint), 'rb') as f:
+        model = torch.load(f)
     model.eval()
+    loss_function = nn.CrossEntropyLoss()
     test_loss = 0
-    ppl_test= []
     
-    for epoch in range(1, args.epoch+1):
+    _, index_te, vocab_te = word_embedding('test.txt', args)
+    data_te, teX, teY= get_batch('test.txt', args)
+    test_iter = teX.size(1)//args.seq_len
+
+    states = (Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda(),
+            Variable(torch.zeros(args.num_lstm_layer, args.batch_size, args.hidden_dim)).cuda())
+    
+    for i in tqdm(range(test_iter)):
         
-        _, index_te, vocab_te = word_embedding('test.txt')
-        data_te, teX, teY= get_batch('test.txt', args.batch_size, args.seq_len)
-        test_input = teX[:, i*args.seq_len:(i+1)*args.seq_len, :]
-        test_target = Variable(teY[:, i*args.seq_len:(i+1)*args.seq_len]).contiguous().view(-1).cuda()
+        test_input = teX[:, i:i+args.seq_len, :]
+        test_target = Variable(teY[:, i+1:(i+1)+args.s1eq_len]).contiguous().view(-1).cuda()
         
         test_out, states = model(test_input, states)
-        test_loss += nn.NLLLoss(F.softmax(test_out).view(-1, len(vocab_te)), test_target)       
-        ppl = torch.exp(test_loss / len(teX))
-        ppl_test.append(ppl)        
+        test_loss += loss_function(test_out.view(-1, len(vocab_te)), test_target).data[0]
+        states = detach(states)
+        ppl = np.exp(test_loss / test_iter)
         
-    print(test_loss, ppl_test)
-    
+        print('TEST LOSS: {}, PPL: {}'.format(test_loss, ppl))
+
 if __name__ == '__main__':
     main()
     

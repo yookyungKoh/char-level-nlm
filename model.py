@@ -13,25 +13,19 @@ from torch.autograd import Variable
 from dataset import *
 
 class Model(nn.Module):   
-    
-    # CNN
-  
-    def __init__(self, args):
+    def __init__(self, args, word_size):
         super(Model, self).__init__()
                 
         # parameters
         self.kernel_w = args.kernel_w
         self.num_feature = args.num_feature
         self.embed_dim = args.embed_dim
-        self.bias = args.bias
         self.max_word_len = args.max_word_len
         self.vocab_size = args.vocab_size
-        self.batch_size = args.batch_size
-        
-        # Embedding
-        self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
-        
+        self.word_size = word_size
+
         # CNN
+        self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
         self.convs = nn.ModuleList([nn.Conv2d(1, self.num_feature[idx], (self.kernel_w[idx], self.embed_dim)) for idx in range(6)])
             
         # Highway
@@ -45,15 +39,12 @@ class Model(nn.Module):
         self.linear_hw = nn.Linear(size, size)
     
         # RNN
-    
         self.num_lstm_layer = args.num_lstm_layer
         self.hidden_dim = args.hidden_dim
         self.output_dim = args.embed_dim
         self.batch_size = args.batch_size
         self.seq_len = args.seq_len
-        
-        _, _, data = word_embedding('train.txt')
-        self.word_size = len(data) # word dictionary size
+
         self.lstm = nn.LSTM(size, self.hidden_dim, self.num_lstm_layer, dropout=args.dropout)
         self.linear_rnn = nn.Linear(self.hidden_dim, self.word_size)
         self.dropout = nn.Dropout(args.dropout)
@@ -89,7 +80,6 @@ class Model(nn.Module):
         z = t * g(Wy + b) + (1 - t) * y
         g: non-linearity (ReLU), t: transform gate, (1 - t): carry gate
         """
-        
         gate = F.sigmoid(self.gate(cnnout))
         nonlinear = F.relu(self.nonlinear(cnnout))
         linear = self.linear_hw(cnnout)
@@ -98,21 +88,17 @@ class Model(nn.Module):
 #            gate = F.sigmoid(self.gate[layer](x))
 #            nonlinear = F.relu(self.nonlinear[layer](x))
 #            linear = self.linear[layer](x)
-        highwayout = gate * nonlinear + (1 - gate) * linear
+        highwayout = (gate * nonlinear) + ((1 - gate) * linear)
     
-    # LSTM
+        # LSTM
         x = highwayout.view([self.seq_len, self.batch_size, -1]) # [35 x 20 x 525]
-        
-        # Forward propagate RNN
         out, h = self.lstm(x, h)
-        out = out.permute(1,0,2)
+        out = out.contiguous().view(self.batch_size, self.seq_len, self.hidden_dim)
         # out size: [20 x 35 x 300]
 
-        # Decode hidden state of last time step
         out = self.dropout(out)
         logit = self.linear_rnn(out) #[20 x 35 x word_vocab_size]
-#        out = F.softmax(out, dim=0)
-
+        
         return logit, h
 
        
