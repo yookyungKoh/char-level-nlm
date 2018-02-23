@@ -24,9 +24,6 @@ class Model(nn.Module):
         self.vocab_size = args.vocab_size
         self.word_size = word_size
         
-        # Embedding
-        self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
-        
         # CNN
         self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
         self.convs = nn.ModuleList([nn.Conv2d(1, self.num_feature[idx], (self.kernel_w[idx], self.embed_dim)) for idx in range(6)])
