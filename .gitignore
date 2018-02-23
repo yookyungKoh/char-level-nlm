@@ -1,5 +1,12 @@
 *.swp
+<<<<<<< HEAD
 *.csv
 *.ipynb
 *.pyc
 data/
+=======
+*.ipynb
+*.pyc
+data/
+
+>>>>>>> 68214d46ff1b3b2f7c794d67df01d1f114fe4ab2

@@ -23,7 +23,10 @@ class Model(nn.Module):
         self.max_word_len = args.max_word_len
         self.vocab_size = args.vocab_size
         self.word_size = word_size
-
+        
+        # Embedding
+        self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
+        
         # CNN
         self.embeddings = nn.Embedding(self.vocab_size, self.embed_dim).cuda()
         self.convs = nn.ModuleList([nn.Conv2d(1, self.num_feature[idx], (self.kernel_w[idx], self.embed_dim)) for idx in range(6)])
@@ -94,6 +97,7 @@ class Model(nn.Module):
         x = highwayout.view([self.seq_len, self.batch_size, -1]) # [35 x 20 x 525]
         out, h = self.lstm(x, h)
         out = out.contiguous().view(self.batch_size, self.seq_len, self.hidden_dim)
+        out = out.view(self.batch_size, self.seq_len, self.hidden_dim)
         # out size: [20 x 35 x 300]
 
         out = self.dropout(out)
